@@ -372,6 +372,7 @@ do
       { '<leader>s', group = '[S]earch', mode = { 'n', 'v' } },
       { '<leader>t', group = '[T]oggle' },
       { '<leader>h', group = 'Git [H]unk', mode = { 'n', 'v' } }, -- Enable gitsigns recommended keymaps first
+      { '<leader>g', group = 'Lazy[G]it' },
       { 'gr', group = 'LSP Actions', mode = { 'n' } },
     },
   }
@@ -382,6 +383,8 @@ do
   -- change the command under that to load whatever the name of that colorscheme is.
   --
   -- If you want to see what colorschemes are already installed, you can use `:Telescope colorscheme`.
+  --  VSCode の Night Owl (sdras/night-owl-vscode-theme) の Neovim 移植版。
+  --  tokyonight は残してあるので `:colorscheme tokyonight-night` で戻せる。
   vim.pack.add { gh 'folke/tokyonight.nvim' }
   ---@diagnostic disable-next-line: missing-fields
   require('tokyonight').setup {
@@ -390,14 +393,127 @@ do
     },
   }
 
+  vim.pack.add { gh 'oxfist/night-owl.nvim' }
+  require('night-owl').setup {
+    italics = false, -- kickstart の tokyonight 設定に合わせてイタリックを切る
+  }
+
   -- Load the colorscheme here.
-  -- Like many other themes, this one has different styles, and you could load
-  -- any other, such as 'tokyonight-storm', 'tokyonight-moon', or 'tokyonight-day'.
-  vim.cmd.colorscheme 'tokyonight-night'
+  vim.cmd.colorscheme 'night-owl'
 
   -- Highlight todo, notes, etc in comments
   vim.pack.add { gh 'folke/todo-comments.nvim' }
   require('todo-comments').setup { signs = false }
+
+  -- [[ snacks.nvim - スタート画面 (dashboard) ]]
+  --  引数なしで `nvim` を起動したときに表示される画面。
+  --  ASCII アート + GitHub Issues / PR の一覧を出す。
+  vim.pack.add { gh 'folke/snacks.nvim' }
+  do
+    -- gh が使えて、かつリモートが GitHub を指しているときだけ GitHub 系を出す。
+    --  git ルートの有無だけでは不十分。ローカル専用や GitLab のリポジトリでも
+    --  通ってしまい、gh が exit 1 で終わって "Job Error" ブロックが描画される
+    --  (実測で確認済み)。リポジトリごとに結果をキャッシュする。
+    local gh_cache = {}
+    local function github_ready()
+      if vim.fn.executable 'gh' ~= 1 then return false end
+      local root = Snacks.git.get_root()
+      if not root then return false end
+      if gh_cache[root] == nil then
+        local remotes = vim.fn.systemlist { 'git', '-C', root, 'remote', '-v' }
+        gh_cache[root] = vim.v.shell_error == 0 and table.concat(remotes, '\n'):match 'github%.com' ~= nil
+      end
+      return gh_cache[root]
+    end
+
+    require('snacks').setup {
+      -- lazygit を snacks のフロートで開く。snacks は既にダッシュボード用に
+      -- 入っているのでプラグイン追加は不要。配色も colorscheme に追従する。
+      lazygit = { enabled = true },
+      dashboard = {
+        enabled = true,
+        -- 既定は 60。1列表示なので横に余裕があり、60 だと gh の見出しが
+        -- "kickstart.nv" のように切れる。AA が幅62なのでそれも収まる値にする。
+        width = 64,
+        preset = {
+          -- ▼▼▼ 好きな AA に差し替えるのはこの header の中だけ ▼▼▼
+          header = [[
+██╗    ██╗███████╗██╗      ██████╗ ██████╗ ███╗   ███╗███████╗
+██║    ██║██╔════╝██║     ██╔════╝██╔═══██╗████╗ ████║██╔════╝
+██║ █╗ ██║█████╗  ██║     ██║     ██║   ██║██╔████╔██║█████╗  
+██║███╗██║██╔══╝  ██║     ██║     ██║   ██║██║╚██╔╝██║██╔══╝  
+╚███╔███╔╝███████╗███████╗╚██████╗╚██████╔╝██║ ╚═╝ ██║███████╗
+ ╚══╝╚══╝ ╚══════╝╚══════╝ ╚═════╝ ╚═════╝ ╚═╝     ╚═╝╚══════╝
+
+k i c k s t a r t . n v i m]],
+          -- ▲▲▲ ここまで ▲▲▲
+
+          -- アイコンは ASCII。Nerd Font を入れたらここをグリフに変えられる。
+          keys = {
+            { icon = '> ', key = 'f', desc = 'Find File', action = ":lua Snacks.dashboard.pick('files')" },
+            { icon = '+ ', key = 'n', desc = 'New File', action = ':ene | startinsert' },
+            { icon = '/ ', key = 'g', desc = 'Find Text', action = ":lua Snacks.dashboard.pick('live_grep')" },
+            { icon = '~ ', key = 'r', desc = 'Recent Files', action = ":lua Snacks.dashboard.pick('oldfiles')" },
+            { icon = '@ ', key = 'c', desc = 'Config', action = ":lua Snacks.dashboard.pick('files', { cwd = vim.fn.stdpath('config') })" },
+            { icon = 'x ', key = 'q', desc = 'Quit', action = ':qa' },
+          },
+        },
+        sections = {
+          { section = 'header' },
+          { section = 'keys', gap = 1, padding = 1 },
+          {
+            icon = '! ',
+            title = 'Open Issues',
+            section = 'terminal',
+            cmd = 'GH_PAGER=cat gh issue list -L 3',
+            key = 'i',
+            action = function() vim.fn.jobstart('gh issue list --web', { detach = true }) end,
+            enabled = github_ready,
+            height = 7,
+            padding = 1,
+            indent = 2,
+            ttl = 5 * 60, -- 5分キャッシュ。無いと起動のたびに通信する。
+          },
+          {
+            icon = 'P ',
+            title = 'Open PRs',
+            section = 'terminal',
+            cmd = 'GH_PAGER=cat gh pr list -L 3',
+            key = 'p',
+            action = function() vim.fn.jobstart('gh pr list --web', { detach = true }) end,
+            enabled = github_ready,
+            height = 7,
+            padding = 1,
+            indent = 2,
+            ttl = 5 * 60,
+          },
+          -- snacks 組み込みの `startup` セクションは使えない。
+          -- 中で require("lazy.stats") を直接呼んでおり lazy.nvim 必須のため、
+          -- vim.pack を使う kickstart では UIEnter で落ちる。自前で出す。
+          --  `text` フィールド単体には関数を渡せない (D:texts が table/string しか受けない)。
+          --  エントリ全体を関数にすると resolve が評価してくれるのでこの形にする。
+          function()
+            local all = vim.pack.get()
+            local active = 0
+            for _, p in ipairs(all) do
+              if p.active then active = active + 1 end
+            end
+            return {
+              align = 'center',
+              padding = 1,
+              text = { { ('%d/%d plugins loaded (vim.pack)'):format(active, #all), hl = 'footer' } },
+            }
+          end,
+        },
+      },
+    }
+
+    --  LazyVim 側と同じ割り当てにしてある (<leader>gg = git ルート, <leader>gG = cwd)
+    if vim.fn.executable 'lazygit' == 1 then
+      vim.keymap.set('n', '<leader>gg', function() Snacks.lazygit { cwd = Snacks.git.get_root() } end, { desc = 'Lazy[g]it (git root)' })
+      vim.keymap.set('n', '<leader>gG', function() Snacks.lazygit() end, { desc = 'Lazy[G]it (cwd)' })
+    end
+  end
 
   -- [[ mini.nvim ]]
   --  A collection of various small independent plugins/modules
@@ -976,7 +1092,7 @@ do
   -- require 'kickstart.plugins.indent_line'
   -- require 'kickstart.plugins.lint'
   -- require 'kickstart.plugins.autopairs'
-  -- require 'kickstart.plugins.neo-tree'
+  require 'kickstart.plugins.neo-tree' -- ファイルツリー。`\` で開閉
   -- require 'kickstart.plugins.gitsigns' -- adds gitsigns recommended keymaps
 
   -- NOTE: You can add your own plugins, configuration, etc from `lua/custom/plugins/*.lua`
