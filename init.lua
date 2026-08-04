@@ -445,6 +445,16 @@ do
       return gh_cache[root]
     end
 
+    --  gh は「Issue が0件」「fork で Issue が無効」「remote 複数で default 未設定」
+    --  など複数の理由で exit 1 になったり空を返したりする。素通しすると
+    --  ダッシュボードに "Job Error" や "[Process exited 0]" が焼き付くので、
+    --  必ず何か出力し、かつ height 行ぶん埋めて終了通知を枠外へ押し出す。
+    local function gh_cmd(subcmd)
+      return '{ out=$(GH_PAGER=cat gh ' .. subcmd .. ' -L 3 2>/dev/null); '
+        .. '[ -n "$out" ] && echo "$out" || echo "  -- none --"; '
+        .. 'printf "\\n\\n\\n\\n\\n\\n\\n"; }'
+    end
+
     require('snacks').setup {
       -- lazygit を snacks のフロートで開く。snacks は既にダッシュボード用に
       -- 入っているのでプラグイン追加は不要。配色も colorscheme に追従する。
@@ -484,7 +494,7 @@ k i c k s t a r t . n v i m]],
             icon = '! ',
             title = 'Open Issues',
             section = 'terminal',
-            cmd = 'GH_PAGER=cat gh issue list -L 3',
+            cmd = gh_cmd 'issue list',
             key = 'i',
             action = function() vim.fn.jobstart('gh issue list --web', { detach = true }) end,
             enabled = github_ready,
@@ -497,7 +507,7 @@ k i c k s t a r t . n v i m]],
             icon = 'P ',
             title = 'Open PRs',
             section = 'terminal',
-            cmd = 'GH_PAGER=cat gh pr list -L 3',
+            cmd = gh_cmd 'pr list',
             key = 'p',
             action = function() vim.fn.jobstart('gh pr list --web', { detach = true }) end,
             enabled = github_ready,
