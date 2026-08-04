@@ -63,3 +63,14 @@ require('neo-tree').setup {
     },
   },
 }
+
+-- 起動時に自動で開く。
+--  `focus` ではなく `show` を使う。focus だとカーソルがツリー側に移り、
+--  ダッシュボードのショートカット (f/g/i/p など) が押せなくなる。
+--  VimEnter の時点ではまだ UI が確定していないので schedule で1テンポ遅らせる。
+vim.api.nvim_create_autocmd('VimEnter', {
+  desc = 'Open neo-tree on startup',
+  callback = function()
+    vim.schedule(function() vim.cmd 'Neotree show' end)
+  end,
+})
