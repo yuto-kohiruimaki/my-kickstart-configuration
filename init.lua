@@ -613,6 +613,44 @@ k i c k s t a r t . n v i m]],
   -- - sr)'  - [S]urround [R]eplace [)] [']
   require('mini.surround').setup()
 
+  -- 現在カーソルがいるインデントスコープ (関数の中括弧内など) に縦線を引き、
+  -- その範囲をテキストオブジェクトとして選択できるようにする。
+  --
+  -- - is  - [I]nside [S]cope を選択 (中身のみ)
+  -- - as  - [A]round [S]cope を選択 (境界の行 = function/end 等も含む)
+  -- - [i  - スコープの開始行へジャンプ
+  -- - ]i  - スコープの終了行へジャンプ
+  --
+  -- 既定のマッピングは object_scope='ii', object_scope_with_border='ai' だが、
+  -- これは上の mini.ai で inside_next/around_next に転用済みのキーと衝突する
+  -- ため is/as に変更している。
+  require('mini.indentscope').setup {
+    -- 既定の記号 '╎' は点線風で薄く見えるので実線の '│' にする
+    symbol = '│',
+    mappings = {
+      object_scope = 'is',
+      object_scope_with_border = 'as',
+    },
+    -- ダッシュボードやファイラーは行のインデントに意味がないので縦線を出さない
+    draw = {
+      predicate = function(scope)
+        local ft = vim.bo.filetype
+        local ignore_ft = { ['neo-tree'] = true, ['snacks_dashboard'] = true, oil = true, help = true }
+        return not ignore_ft[ft] and not scope.body.is_incomplete
+      end,
+    },
+  }
+  -- 既定は Delimiter にリンクしていて Normal とほぼ同じ薄さで目立たない。
+  -- colorscheme 切替でハイライトは初期化されるので ColorScheme で貼り直す
+  -- (ダッシュボードの見出しを白にしている処理と同じ方式)。
+  local function indentscope_bold() vim.api.nvim_set_hl(0, 'MiniIndentscopeSymbol', { fg = '#61afef', bold = true }) end
+  vim.api.nvim_create_autocmd('ColorScheme', {
+    desc = 'Make the indentscope guide line bolder and more visible',
+    group = vim.api.nvim_create_augroup('kickstart-indentscope-hl', { clear = true }),
+    callback = indentscope_bold,
+  })
+  indentscope_bold()
+
   -- Simple and easy statusline.
   --  You could remove this setup call if you don't like it,
   --  and try some other statusline plugin
