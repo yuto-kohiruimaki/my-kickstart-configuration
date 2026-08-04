@@ -99,7 +99,9 @@ do
   vim.g.maplocalleader = ' '
 
   -- Set to true if you have a Nerd Font installed and selected in the terminal
-  vim.g.have_nerd_font = false
+  --  Ghostty で FiraCode Nerd Font Mono を使用中 (~/.config/ghostty/config)。
+  --  false に戻せば neo-tree などが自動で ASCII アイコンに切り替わる。
+  vim.g.have_nerd_font = true
 
   -- [[ Setting options ]]
   --  See `:help vim.o`

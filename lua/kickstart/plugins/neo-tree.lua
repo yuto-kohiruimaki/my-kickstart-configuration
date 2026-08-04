@@ -10,39 +10,40 @@ vim.pack.add {
 vim.keymap.set('n', '\\', '<Cmd>Neotree reveal<CR>', { desc = 'NeoTree reveal', silent = true })
 
 -- Nerd Font が無い環境ではデフォルトのグリフが豆腐になり、しかも表示幅が
--- 1桁ずれて区切り線がガタつく。フォントの有無でアイコン一式を切り替える。
+-- 1桁ずれて区切り線がガタつく。そのときだけ ASCII に差し替える。
 --  (`vim.g.have_nerd_font` は init.lua の SECTION 1 で定義)
-local icons = vim.g.have_nerd_font
-    and {
-      folder_closed = '',
-      folder_open = '',
-      folder_empty = '󰉖',
-      default = '',
-    }
-  or {
-    folder_closed = '+',
-    folder_open = '-',
-    folder_empty = '.',
-    default = ' ',
+--
+-- Nerd Font がある場合は「何も指定しない」。neo-tree と mini.icons が持つ
+-- 既定グリフをそのまま使わせる。ここでグリフを直書きすると、編集の過程で
+-- 文字が欠落して folder_closed = '' のような空文字になり、フォルダアイコンが
+-- 消える事故が起きる (実際に起きた)。
+local component_configs = {}
+if not vim.g.have_nerd_font then
+  component_configs = {
+    icon = {
+      folder_closed = '+',
+      folder_open = '-',
+      folder_empty = '.',
+      default = ' ',
+    },
+    git_status = {
+      symbols = {
+        added = 'A',
+        modified = 'M',
+        deleted = 'D',
+        renamed = 'R',
+        untracked = '?',
+        ignored = 'i',
+        unstaged = '!',
+        staged = 'S',
+        conflict = 'C',
+      },
+    },
   }
-
-local git_symbols = vim.g.have_nerd_font and {} or {
-  added = 'A',
-  modified = 'M',
-  deleted = 'D',
-  renamed = 'R',
-  untracked = '?',
-  ignored = 'i',
-  unstaged = '!',
-  staged = 'S',
-  conflict = 'C',
-}
+end
 
 require('neo-tree').setup {
-  default_component_configs = {
-    icon = icons,
-    git_status = { symbols = git_symbols },
-  },
+  default_component_configs = component_configs,
   filesystem = {
     -- 隠しファイルを表示する。`.env` は gitignore されていることが多いので
     -- hide_dotfiles だけでは足りず hide_gitignored も落とす必要がある。
