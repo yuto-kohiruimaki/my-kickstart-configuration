@@ -562,6 +562,22 @@ k i c k s t a r t . n v i m]],
     end
   end
 
+  -- [[ oil.nvim ]]
+  --  ディレクトリを「編集可能なバッファ」として開くファイラ。
+  --  neo-tree (ツリーで俯瞰する) とは役割が違うので併用する:
+  --    neo-tree = プロジェクト全体の構造を見る / oil = 今いる階層を手早く操作する
+  --  行を編集して :w すると、リネーム・移動・削除がまとめて反映される。
+  vim.pack.add { gh 'stevearc/oil.nvim' }
+  require('oil').setup {
+    -- netrw を置き換える。`nvim .` や `:e .` が oil で開くようになる
+    default_file_explorer = true,
+    view_options = {
+      show_hidden = true, -- neo-tree 側の設定と揃える (.env などを見せる)
+    },
+  }
+  --  `-` で親ディレクトリを開く。oil の慣例的な割り当て。
+  vim.keymap.set('n', '-', '<CMD>Oil<CR>', { desc = 'Open parent directory (oil)' })
+
   -- [[ mini.nvim ]]
   --  A collection of various small independent plugins/modules
   vim.pack.add { gh 'nvim-mini/mini.nvim' }
@@ -1138,9 +1154,9 @@ do
   -- require 'kickstart.plugins.debug'
   -- require 'kickstart.plugins.indent_line'
   -- require 'kickstart.plugins.lint'
-  -- require 'kickstart.plugins.autopairs'
+  require 'kickstart.plugins.autopairs' -- 括弧・クォートの自動補完
   require 'kickstart.plugins.neo-tree' -- ファイルツリー。`\` で開閉
-  -- require 'kickstart.plugins.gitsigns' -- adds gitsigns recommended keymaps
+  require 'kickstart.plugins.gitsigns' -- hunk 単位のステージ/取消と ]c [c の差分ジャンプ
 
   -- NOTE: You can add your own plugins, configuration, etc from `lua/custom/plugins/*.lua`
   --
