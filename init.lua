@@ -402,8 +402,7 @@ do
   -- change the command under that to load whatever the name of that colorscheme is.
   --
   -- If you want to see what colorschemes are already installed, you can use `:Telescope colorscheme`.
-  --  VSCode の Night Owl (sdras/night-owl-vscode-theme) の Neovim 移植版。
-  --  tokyonight は残してあるので `:colorscheme tokyonight-night` で戻せる。
+  --  tokyonight は kickstart 標準。残してあるので `:colorscheme tokyonight-night` で戻せる。
   vim.pack.add { gh 'folke/tokyonight.nvim' }
   ---@diagnostic disable-next-line: missing-fields
   require('tokyonight').setup {
@@ -412,13 +411,20 @@ do
     },
   }
 
-  vim.pack.add { gh 'oxfist/night-owl.nvim' }
-  require('night-owl').setup {
-    italics = false, -- kickstart の tokyonight 設定に合わせてイタリックを切る
-  }
+  --  [無効化中] VSCode の Night Owl (sdras/night-owl-vscode-theme) の移植版。
+  --  復旧するには以下4行のコメントを外し、下の onedark 3行をコメントアウトする。
+  -- vim.pack.add { gh 'oxfist/night-owl.nvim' }
+  -- require('night-owl').setup {
+  --   italics = false,
+  -- }
 
-  -- Load the colorscheme here.
-  vim.cmd.colorscheme 'night-owl'
+  --  VSCode の One Dark Pro の Darker 相当。
+  --  移植版は複数あるが olimorris/onedarkpro.nvim の `onedark_dark` は純黒
+  --  (#000000) で Darker ではない。本家 Darker の背景 #23272e に対し
+  --  こちらの `darker` は #1f2329 で最も近いためこれを使う。
+  vim.pack.add { gh 'navarasu/onedark.nvim' }
+  require('onedark').setup { style = 'darker' }
+  require('onedark').load()
 
   -- Highlight todo, notes, etc in comments
   vim.pack.add { gh 'folke/todo-comments.nvim' }
@@ -536,6 +542,18 @@ k i c k s t a r t . n v i m]],
         },
       },
     }
+
+    --  ASCII アートを白にする。既定では SnacksDashboardHeader が Title に
+    --  リンクされており、カラースキームの色が乗る。
+    --  colorscheme を切り替えるとハイライトは初期化されるので ColorScheme で
+    --  貼り直す。設定順に依存しないよう、その場でも一度適用しておく。
+    local function header_white() vim.api.nvim_set_hl(0, 'SnacksDashboardHeader', { fg = '#ffffff' }) end
+    vim.api.nvim_create_autocmd('ColorScheme', {
+      desc = 'Keep the dashboard ASCII art white',
+      group = vim.api.nvim_create_augroup('kickstart-dashboard-header', { clear = true }),
+      callback = header_white,
+    })
+    header_white()
 
     --  LazyVim 側と同じ割り当てにしてある (<leader>gg = git ルート, <leader>gG = cwd)
     if vim.fn.executable 'lazygit' == 1 then
