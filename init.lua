@@ -251,6 +251,25 @@ do
     group = vim.api.nvim_create_augroup('kickstart-highlight-yank', { clear = true }),
     callback = function() vim.hl.on_yank() end,
   })
+
+  -- [[ IME を挿入モード離脱時に英字へ戻す (macOS) ]]
+  --  日本語入力のまま <Esc> を押すと hjkl などのノーマルモード操作が効かなくなる。
+  --  切り替えには外部 CLI が要る (Neovim 単体では OS の入力ソースを操作できない)。
+  --    brew install im-select
+  --
+  --  入力ソース ID は `im-select` を引数なしで実行すると確認できる。
+  --    com.apple.inputmethod.Kotoeri.RomajiTyping.Roman     英字 (無変換相当) ← これを使う
+  --    com.apple.inputmethod.Kotoeri.RomajiTyping.Japanese  ひらがな
+  --    com.apple.keylayout.ABC                              ABC (US配列)
+  if vim.fn.has 'mac' == 1 and vim.fn.executable 'im-select' == 1 then
+    local ime_off = 'com.apple.inputmethod.Kotoeri.RomajiTyping.Roman'
+    vim.api.nvim_create_autocmd('InsertLeave', {
+      desc = 'Switch macOS IME back to romaji when leaving insert mode',
+      group = vim.api.nvim_create_augroup('kickstart-ime-off', { clear = true }),
+      -- vim.system は非同期。同期実行すると <Esc> のたびにプロセス起動分止まる。
+      callback = function() vim.system { 'im-select', ime_off } end,
+    })
+  end
 end
 
 -- ============================================================
