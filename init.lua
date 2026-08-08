@@ -100,7 +100,7 @@ do
 
   -- Set to true if you have a Nerd Font installed and selected in the terminal
   --  Ghostty で FiraCode Nerd Font Mono を使用中 (~/.config/ghostty/config)。
-  --  false に戻せば neo-tree などが自動で ASCII アイコンに切り替わる。
+  --  false に戻せば mini.icons などが自動で ASCII アイコンに切り替わる。
   vim.g.have_nerd_font = true
 
   -- [[ Setting options ]]
@@ -394,6 +394,7 @@ do
       { '<leader>t', group = '[T]oggle' },
       { '<leader>h', group = 'Git [H]unk', mode = { 'n', 'v' } }, -- Enable gitsigns recommended keymaps first
       { '<leader>g', group = 'Lazy[G]it' },
+      { '<leader>x', group = 'Trouble/Quickfix' },
       { 'gr', group = 'LSP Actions', mode = { 'n' } },
     },
   }
@@ -437,32 +438,6 @@ do
   --  ASCII アート + GitHub Issues / PR の一覧を出す。
   vim.pack.add { gh 'folke/snacks.nvim' }
   do
-    -- gh が使えて、かつリモートが GitHub を指しているときだけ GitHub 系を出す。
-    --  git ルートの有無だけでは不十分。ローカル専用や GitLab のリポジトリでも
-    --  通ってしまい、gh が exit 1 で終わって "Job Error" ブロックが描画される
-    --  (実測で確認済み)。リポジトリごとに結果をキャッシュする。
-    local gh_cache = {}
-    local function github_ready()
-      if vim.fn.executable 'gh' ~= 1 then return false end
-      local root = Snacks.git.get_root()
-      if not root then return false end
-      if gh_cache[root] == nil then
-        local remotes = vim.fn.systemlist { 'git', '-C', root, 'remote', '-v' }
-        gh_cache[root] = vim.v.shell_error == 0 and table.concat(remotes, '\n'):match 'github%.com' ~= nil
-      end
-      return gh_cache[root]
-    end
-
-    --  gh は「Issue が0件」「fork で Issue が無効」「remote 複数で default 未設定」
-    --  など複数の理由で exit 1 になったり空を返したりする。素通しすると
-    --  ダッシュボードに "Job Error" や "[Process exited 0]" が焼き付くので、
-    --  必ず何か出力し、かつ height 行ぶん埋めて終了通知を枠外へ押し出す。
-    local function gh_cmd(subcmd)
-      return '{ out=$(GH_PAGER=cat gh ' .. subcmd .. ' -L 3 2>/dev/null); '
-        .. '[ -n "$out" ] && echo "$out" || echo "  -- none --"; '
-        .. 'printf "\\n\\n\\n\\n\\n\\n\\n"; }'
-    end
-
     require('snacks').setup {
       -- lazygit を snacks のフロートで開く。snacks は既にダッシュボード用に
       -- 入っているのでプラグイン追加は不要。配色も colorscheme に追従する。
@@ -480,9 +455,7 @@ do
 ██║ █╗ ██║█████╗  ██║     ██║     ██║   ██║██╔████╔██║█████╗     
 ██║███╗██║██╔══╝  ██║     ██║     ██║   ██║██║╚██╔╝██║██╔══╝     
 ╚███╔███╔╝███████╗███████╗╚██████╗╚██████╔╝██║ ╚═╝ ██║███████╗██╗
- ╚══╝╚══╝ ╚══════╝╚══════╝ ╚═════╝ ╚═════╝ ╚═╝     ╚═╝╚══════╝╚═╝
-
-k i c k s t a r t . n v i m]],
+ ╚══╝╚══╝ ╚══════╝╚══════╝ ╚═════╝ ╚═════╝ ╚═╝     ╚═╝╚══════╝╚═╝]],
           -- ▲▲▲ ここまで ▲▲▲
 
           -- アイコンは ASCII。Nerd Font を入れたらここをグリフに変えられる。
@@ -498,32 +471,6 @@ k i c k s t a r t . n v i m]],
         sections = {
           { section = 'header' },
           { section = 'keys', gap = 1, padding = 1 },
-          {
-            icon = '! ',
-            title = 'Open Issues',
-            section = 'terminal',
-            cmd = gh_cmd 'issue list',
-            key = 'i',
-            action = function() vim.fn.jobstart('gh issue list --web', { detach = true }) end,
-            enabled = github_ready,
-            height = 7,
-            padding = 1,
-            indent = 2,
-            ttl = 5 * 60, -- 5分キャッシュ。無いと起動のたびに通信する。
-          },
-          {
-            icon = 'P ',
-            title = 'Open PRs',
-            section = 'terminal',
-            cmd = gh_cmd 'pr list',
-            key = 'p',
-            action = function() vim.fn.jobstart('gh pr list --web', { detach = true }) end,
-            enabled = github_ready,
-            height = 7,
-            padding = 1,
-            indent = 2,
-            ttl = 5 * 60,
-          },
           -- snacks 組み込みの `startup` セクションは使えない。
           -- 中で require("lazy.stats") を直接呼んでおり lazy.nvim 必須のため、
           -- vim.pack を使う kickstart では UIEnter で落ちる。自前で出す。
@@ -565,20 +512,38 @@ k i c k s t a r t . n v i m]],
   end
 
   -- [[ oil.nvim ]]
-  --  ディレクトリを「編集可能なバッファ」として開くファイラ。
-  --  neo-tree (ツリーで俯瞰する) とは役割が違うので併用する:
-  --    neo-tree = プロジェクト全体の構造を見る / oil = 今いる階層を手早く操作する
-  --  行を編集して :w すると、リネーム・移動・削除がまとめて反映される。
+  --  唯一のファイルエクスプローラー。ディレクトリを「編集可能なバッファ」
+  --  として開き、行を編集して :w するとリネーム・移動・削除がまとめて反映される。
   vim.pack.add { gh 'stevearc/oil.nvim' }
   require('oil').setup {
     -- netrw を置き換える。`nvim .` や `:e .` が oil で開くようになる
     default_file_explorer = true,
     view_options = {
-      show_hidden = true, -- neo-tree 側の設定と揃える (.env などを見せる)
+      show_hidden = true, -- .env などの隠しファイルも見せる
     },
   }
   --  `-` で親ディレクトリを開く。oil の慣例的な割り当て。
   vim.keymap.set('n', '-', '<CMD>Oil<CR>', { desc = 'Open parent directory (oil)' })
+
+  -- [[ toggleterm.nvim ]]
+  --  <leader>tt でフローティングのターミナルを開閉する。
+  vim.pack.add { gh 'akinsho/toggleterm.nvim' }
+  require('toggleterm').setup { direction = 'float' }
+  vim.keymap.set({ 'n', 't' }, '<leader>tt', '<CMD>ToggleTerm<CR>', { desc = '[T]oggle [T]erminal' })
+
+  -- [[ winresizer ]]
+  --  <C-e> でウィンドウのリサイズモードに入り、hjkl で調整、<CR>/<Esc>
+  --  で確定、q でキャンセル。Vim script 製だが vim.pack はどんな git
+  --  リポジトリでも同様にインストールできる。
+  --  NOTE: 既定のトリガー <C-e> は Neovim 組み込みの「1行下にスクロール」
+  --  を上書きする。使用中は :help i_CTRL-E 相当のスクロールが効かなくなる。
+  vim.pack.add { gh 'simeji/winresizer' }
+
+  -- [[ vim-commentary ]]
+  --  gcc / gc{motion} でコメントのトグル。
+  --  NOTE: Neovim は 0.10 以降 gcc/gc を組み込みで提供済み (`:help gcc`)。
+  --  同じキーに上書きされるだけで実質的な機能追加はない。
+  vim.pack.add { gh 'tpope/vim-commentary' }
 
   -- [[ mini.nvim ]]
   --  A collection of various small independent plugins/modules
@@ -597,11 +562,20 @@ k i c k s t a r t . n v i m]],
   --  - va)  - [V]isually select [A]round [)]paren
   --  - yiiq - [Y]ank [I]nside [I]+1 [Q]uote
   --  - ci'  - [C]hange [I]nside [']quote
+  --  af/if (関数), ac/ic (クラス) は nvim-treesitter-textobjects (SECTION 9)
+  --  が提供する textobjects.scm のクエリを使う。gen_spec.treesitter は
+  --  vim.treesitter.query.get() を直接呼ぶだけなので、そのプラグイン自身の
+  --  Lua API (select/move) は経由しない。
+  local ts_textobject = require('mini.ai').gen_spec.treesitter
   require('mini.ai').setup {
     -- NOTE: Avoid conflicts with the built-in incremental selection mappings on Neovim>=0.12 (see `:help treesitter-incremental-selection`)
     mappings = {
       around_next = 'aa',
       inside_next = 'ii',
+    },
+    custom_textobjects = {
+      f = ts_textobject { a = '@function.outer', i = '@function.inner' },
+      c = ts_textobject { a = '@class.outer', i = '@class.inner' },
     },
     n_lines = 500,
   }
@@ -635,7 +609,7 @@ k i c k s t a r t . n v i m]],
     draw = {
       predicate = function(scope)
         local ft = vim.bo.filetype
-        local ignore_ft = { ['neo-tree'] = true, ['snacks_dashboard'] = true, oil = true, help = true }
+        local ignore_ft = { ['snacks_dashboard'] = true, oil = true, help = true }
         return not ignore_ft[ft] and not scope.body.is_incomplete
       end,
     },
@@ -801,6 +775,56 @@ do
 
   -- Shortcut for searching your Neovim configuration files
   vim.keymap.set('n', '<leader>sn', function() builtin.find_files { cwd = vim.fn.stdpath 'config', follow = true } end, { desc = '[S]earch [N]eovim files' })
+
+  -- [[ flash.nvim ]]
+  --  画面内の任意位置へ数打鍵でジャンプする。`s` を押すとラベルが浮かび、
+  --  対応する文字を押すとそこへ飛ぶ。f/t/F/T もこれで強化される。
+  --
+  --  <C-Space> は Neovim 0.12 組み込みの incremental selection が既に
+  --  使っているため、flash 側の treesitter incremental selection 用の
+  --  <C-Space> マッピングは追加しない (LazyVim の既定にはあるが、ここでは
+  --  導入すると上書きしてしまう)。
+  vim.pack.add { gh 'folke/flash.nvim' }
+  require('flash').setup()
+  vim.keymap.set({ 'n', 'x', 'o' }, 's', function() require('flash').jump() end, { desc = 'Flash' })
+  vim.keymap.set({ 'n', 'x', 'o' }, 'S', function() require('flash').treesitter() end, { desc = 'Flash Treesitter' })
+  vim.keymap.set('o', 'r', function() require('flash').remote() end, { desc = 'Remote Flash' })
+  vim.keymap.set({ 'o', 'x' }, 'R', function() require('flash').treesitter_search() end, { desc = 'Treesitter Search' })
+  vim.keymap.set('c', '<C-s>', function() require('flash').toggle() end, { desc = 'Toggle Flash Search' })
+
+  -- [[ trouble.nvim ]]
+  --  診断・LSP参照・quickfix/loclist を見やすい一覧パネルで表示する。
+  vim.pack.add { gh 'folke/trouble.nvim' }
+  --  `:Trouble` ユーザーコマンドは setup() の中でしか登録されない
+  --  (require するだけでは E492: Not an editor command になる)。
+  require('trouble').setup {
+    modes = {
+      lsp = { win = { position = 'right' } },
+    },
+  }
+  vim.keymap.set('n', '<leader>xx', '<cmd>Trouble diagnostics toggle<CR>', { desc = '[X] Diagnostics (Trouble)' })
+  vim.keymap.set('n', '<leader>xX', '<cmd>Trouble diagnostics toggle filter.buf=0<CR>', { desc = '[X] Buffer Diagnostics (Trouble)' })
+  vim.keymap.set('n', '<leader>cs', '<cmd>Trouble symbols toggle<CR>', { desc = '[S]ymbols (Trouble)' })
+  vim.keymap.set('n', '<leader>cS', '<cmd>Trouble lsp toggle<CR>', { desc = 'LSP references/definitions (Trouble)' })
+  vim.keymap.set('n', '<leader>xL', '<cmd>Trouble loclist toggle<CR>', { desc = '[X] Location List (Trouble)' })
+  vim.keymap.set('n', '<leader>xQ', '<cmd>Trouble qflist toggle<CR>', { desc = '[X] Quickfix List (Trouble)' })
+  -- Trouble が開いていればその中を、閉じていれば通常の quickfix を進む
+  vim.keymap.set('n', '[q', function()
+    if require('trouble').is_open() then
+      require('trouble').prev { skip_groups = true, jump = true }
+    else
+      local ok, err = pcall(vim.cmd.cprev)
+      if not ok then vim.notify(err, vim.log.levels.ERROR) end
+    end
+  end, { desc = 'Previous Trouble/Quickfix Item' })
+  vim.keymap.set('n', ']q', function()
+    if require('trouble').is_open() then
+      require('trouble').next { skip_groups = true, jump = true }
+    else
+      local ok, err = pcall(vim.cmd.cnext)
+      if not ok then vim.notify(err, vim.log.levels.ERROR) end
+    end
+  end, { desc = 'Next Trouble/Quickfix Item' })
 end
 
 -- ============================================================
@@ -1175,6 +1199,27 @@ do
       end
     end,
   })
+
+  -- [[ nvim-treesitter-textobjects ]]
+  --  関数・クラス単位でのテキストオブジェクト選択とジャンプ。
+  --
+  --  "select" (af/if, ac/ic) は下の mini.ai (SECTION 4) の
+  --  custom_textobjects から MiniAi.gen_spec.treesitter() 経由で使う。
+  --  mini.ai は 'a'/'i' を <expr> マッピングとして登録し、後続の1文字
+  --  (f/c など) を内部で直接読み取るため、ここで vim.keymap.set('x','af',...)
+  --  のように直接マッピングしても発火しない (mini.ai 側に横取りされる)。
+  --  そのためこのプラグインは textobjects.scm のクエリファイル供給元として
+  --  だけ使い、select 用の Lua API 自体は呼ばない。
+  --
+  --  "move" (]m [m など、関数の先頭/末尾へジャンプ) は mini.ai がカバー
+  --  しない機能なのでこちらの API をそのまま使う。
+  vim.pack.add { gh 'nvim-treesitter/nvim-treesitter-textobjects' }
+  require('nvim-treesitter-textobjects').setup { move = { set_jumps = true } }
+  local ts_move = require 'nvim-treesitter-textobjects.move'
+  vim.keymap.set({ 'n', 'x', 'o' }, ']m', function() ts_move.goto_next_start('@function.outer', 'textobjects') end, { desc = 'Next function start' })
+  vim.keymap.set({ 'n', 'x', 'o' }, ']M', function() ts_move.goto_next_end('@function.outer', 'textobjects') end, { desc = 'Next function end' })
+  vim.keymap.set({ 'n', 'x', 'o' }, '[m', function() ts_move.goto_previous_start('@function.outer', 'textobjects') end, { desc = 'Previous function start' })
+  vim.keymap.set({ 'n', 'x', 'o' }, '[M', function() ts_move.goto_previous_end('@function.outer', 'textobjects') end, { desc = 'Previous function end' })
 end
 
 -- ============================================================
@@ -1195,7 +1240,6 @@ do
   -- require 'kickstart.plugins.indent_line'
   -- require 'kickstart.plugins.lint'
   require 'kickstart.plugins.autopairs' -- 括弧・クォートの自動補完
-  require 'kickstart.plugins.neo-tree' -- ファイルツリー。`\` で開閉
   require 'kickstart.plugins.gitsigns' -- hunk 単位のステージ/取消と ]c [c の差分ジャンプ
 
   -- NOTE: You can add your own plugins, configuration, etc from `lua/custom/plugins/*.lua`
